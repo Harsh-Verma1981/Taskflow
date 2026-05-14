@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(grep -rE \"var\\\\\\(--\\(white|surface|text-muted|transition|purple-faint|purple-dark\\)\" client/src --include=*.css)"
-    ]
-  }
-}
