@@ -255,4 +255,64 @@
   .filters .pills:first-of-type {
     justify-content: flex-start;
   }
+
+  /* Enhanced mobile improvements */
+  .header {
+    gap: 16px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+    margin-top: 12px;
+  }
+
+  .filters {
+    gap: 16px;
+  }
+
+  .searchWrap {
+    margin-bottom: 12px;
+  }
+
+  .pills {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    min-width: 60px;
+    text-align: center;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .list {
+    gap: 12px;
+  }
+
+  .taskCard {
+    padding: 16px;
+  }
+
+  .taskTitle {
+    font-size: 15px;
+  }
+
+  .taskMeta {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .timeChip,
+  .dateChip,
+  .badge {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .notes {
+    font-size: 13px;
+    margin-top: 8px;
+  }
 }

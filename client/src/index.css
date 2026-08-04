@@ -275,8 +275,220 @@ textarea.field-input {
   animation: spin 0.8s linear infinite;
 }
 
+/* Page transition animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+.page-transition-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-transition-page.enter {
+  animation: fadeIn 300ms ease forwards;
+}
+
+.page-transition-page.exit {
+  animation: fadeOut 300ms ease forwards;
+}
+
 /* Toast customization */
 .react-hot-toast {
   font-family: var(--font-sans) !important;
   font-size: 13px !important;
+}
+
+/* Skeleton loader styles */
+.skeleton {
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-text {
+  height: 16px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.skeleton-title {
+  height: 20px;
+  border-radius: 4px;
+  margin: 6px 0;
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin: 0 auto;
+}
+
+.skeleton-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin: 8px auto;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-color: var(--bg-input);
+  }
+  50% {
+    background-color: var(--border);
+  }
+  100% {
+    background-color: var(--bg-input);
+  }
+}
+
+.skeleton-animated {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Mobile touch target enhancements */
+@media (max-width: 768px) {
+  /* Ensure minimum touch target size of 44px */
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-icon,
+  .pill,
+  .doneBtn,
+  .deleteBtn {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  /* Increase spacing for touch */
+  .page {
+    padding: 12px !important;
+  }
+
+  /* Make buttons more prominent on touch */
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-ghost:hover {
+    transform: none !important;
+  }
+}
+
+/* Focus styles for accessibility */
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-ghost:focus-visible,
+.btn-icon:focus-visible,
+.doneBtn:focus-visible,
+.deleteBtn:focus-visible,
+.pill:focus-visible,
+.navItem:focus-visible,
+.hamburger:focus-visible,
+.logoutBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+/* Enhanced hover animations for interactive elements */
+.btn-primary,
+.btn-secondary,
+.btn-ghost,
+.btn-icon,
+.doneBtn,
+.deleteBtn,
+.pill,
+.navItem,
+.hamburger,
+.logoutBtn,
+.NavLink {
+  transition: all 0.2s ease !important;
+}
+
+/* Subtle scale-down effect on press */
+.btn-primary:active,
+.btn-secondary:active,
+.btn-ghost:active,
+.btn-icon:active,
+.doneBtn:active,
+.deleteBtn:active,
+.pill:active,
+.navItem:active,
+.hamburger:active,
+.logoutBtn:active {
+  transform: scale(0.97);
+}
+
+/* Improve form field focus */
+.field-input:focus-visible,
+.field-select:focus-visible,
+.textarea.field-input:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-light);
+  outline: none;
+}
+
+/* Ensure proper color contrast for text over backgrounds */
+.navActive,
+.mobileNavItem.active {
+  font-weight: 600 !important;
+}
+
+/* Modal animations */
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modalFadeOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-20px) scale(0.95); }
+}
+
+.modal-animate-in {
+  animation: modalFadeIn 200ms ease forwards;
+}
+
+.modal-animate-out {
+  animation: modalFadeOut 200ms ease forwards;
+}
+
+/* Disable animation for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .skeleton-animated {
+    animation: none !important;
+  }
+
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-ghost:active,
+  .btn-icon:active,
+  .doneBtn:active,
+  .deleteBtn:active,
+  .pill:active,
+  .navItem:active,
+  .hamburger:active,
+  .logoutBtn:active {
+    transform: none !important;
+  }
+
+  .modal-animate-in,
+  .modal-animate-out {
+    animation: none !important;
+  }
 }

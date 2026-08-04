@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, AlertTriangle, Bell, Plus, ArrowRight } from "luci
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import AddTaskModal from "../components/AddTaskModal";
+import SkeletonLoader from "../components/SkeletonLoader";
 import s from "./Dashboard.module.css";
 
 const StatCard = ({ icon: Icon, label, value, color, sub }) => (
@@ -76,7 +77,9 @@ export default function Dashboard() {
         </div>
 
         {!stats ? (
-          <div className={s.loading}><span className="spinner" /></div>
+          <div className={s.loading}>
+            <SkeletonLoader count={3} type="title" className="dashboard-skeleton" />
+          </div>
         ) : stats.todayTasks?.length === 0 ? (
           <div className={`${s.emptyCard} card`}>
             <p>No tasks scheduled for today.</p>

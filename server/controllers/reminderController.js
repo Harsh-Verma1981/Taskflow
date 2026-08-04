@@ -3,7 +3,7 @@ const Reminder = require("../models/Reminder");
 // ── POST /api/reminders ──────────────────────────────────────────────────────
 const createReminder = async (req, res) => {
   try {
-    const { label, time, repeatType, repeatDayOfWeek, onceDate } = req.body;
+    const { task, scheduledFor, label, time, repeatType, repeatDayOfWeek, onceDate } = req.body;
 
     if (!label || !time) {
       return res.status(400).json({ message: "label and time are required." });
@@ -11,6 +11,8 @@ const createReminder = async (req, res) => {
 
     const reminder = await Reminder.create({
       user: req.user._id,
+      task: task || null,
+      scheduledFor: scheduledFor ? new Date(scheduledFor) : new Date(),
       label,
       time,
       repeatType: repeatType || "once",

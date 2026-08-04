@@ -4,6 +4,7 @@ import { Plus, Search, Trash2, CheckCircle2, Clock, Filter } from "lucide-react"
 import toast from "react-hot-toast";
 import api from "../api/axios";
 import AddTaskModal from "../components/AddTaskModal";
+import SkeletonLoader from "../components/SkeletonLoader";
 import s from "./TasksPage.module.css";
 
 const CATS = ["all","work","personal","study","health","finance","other"];
@@ -88,7 +89,9 @@ export default function TasksPage() {
 
       {/* Task list */}
       {loading ? (
-        <div className={s.center}><span className="spinner" /></div>
+        <div className={s.center}>
+          <SkeletonLoader count={4} type="title" className="tasks-skeleton" />
+        </div>
       ) : tasks.length === 0 ? (
         <div className={`${s.empty} card`}>
           <p>No tasks found.</p>

@@ -76,7 +76,8 @@ export default function Layout() {
         <button
           className={s.hamburger}
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle menu"
+          aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+          aria-expanded={sidebarOpen}
         >
           {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -114,7 +115,7 @@ export default function Layout() {
               <div className={s.userEmail}>{user?.email}</div>
             </div>
           </div>
-          <button className={s.logoutBtn} onClick={handleLogout} title="Sign out">
+          <button className={s.logoutBtn} onClick={handleLogout} title="Sign out" aria-label="Sign out">
             <LogOut size={18} />
           </button>
         </div>

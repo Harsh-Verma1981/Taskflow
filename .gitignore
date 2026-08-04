@@ -5,3 +5,6 @@ dist/
 .DS_Store
 *.log
 .claude
+Agents.md
+Audit.md
+PRD.md

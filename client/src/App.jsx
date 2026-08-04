@@ -22,25 +22,29 @@ const PublicRoute = ({ children }) => {
   return user ? <Navigate to="/dashboard" replace /> : children;
 };
 
+import TransitionWrapper from "./components/TransitionWrapper";
+
 export default function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
         <BrowserRouter>
           <Toaster position="top-right" toastOptions={{ style: { fontFamily: "var(--font-sans)", fontSize: "13px" } }} />
-          <Routes>
-            <Route path="/login"  element={<PublicRoute><AuthPage /></PublicRoute>} />
-            <Route path="/signup" element={<PublicRoute><AuthPage defaultTab="signup" /></PublicRoute>} />
-            <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard"  element={<Dashboard />} />
-              <Route path="tasks"      element={<TasksPage />} />
-              <Route path="history"    element={<HistoryPage />} />
-              <Route path="reminders"  element={<RemindersPage />} />
-              <Route path="settings"   element={<SettingsPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <TransitionWrapper>
+            <Routes>
+              <Route path="/login"  element={<PublicRoute><AuthPage /></PublicRoute>} />
+              <Route path="/signup" element={<PublicRoute><AuthPage defaultTab="signup" /></PublicRoute>} />
+              <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard"  element={<Dashboard />} />
+                <Route path="tasks"      element={<TasksPage />} />
+                <Route path="history"    element={<HistoryPage />} />
+                <Route path="reminders"  element={<RemindersPage />} />
+                <Route path="settings"   element={<SettingsPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </TransitionWrapper>
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>

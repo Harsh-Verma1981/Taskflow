@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../api/axios";

@@ -284,4 +284,49 @@
   .statNum {
     font-size: 22px;
   }
+
+  /* Enhanced mobile improvements */
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .sectionTitle {
+    font-size: 16px;
+  }
+
+  .seeAll {
+    font-size: 12px;
+    align-self: flex-end;
+  }
+
+  .taskCard {
+    padding: 12px;
+  }
+
+  .taskTitle {
+    font-size: 13px;
+  }
+
+  .taskMeta {
+    gap: 6px;
+  }
+
+  .timeChip,
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
 }

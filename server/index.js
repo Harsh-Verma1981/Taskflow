@@ -6,7 +6,8 @@ const morgan = require("morgan");
 
 const connectDB = require("./config/db");
 const { apiLimiter } = require("./middleware/rateLimiter");
-const { startCronJobs } = require("./services/cronService");
+// Updated import to match exported initCronJobs function
+const { initCronJobs } = require("./services/cronService");
 
 const authRoutes     = require("./routes/auth");
 const taskRoutes     = require("./routes/tasks");
@@ -54,6 +55,7 @@ const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀  Server running on port ${PORT}`);
-    startCronJobs();
+    // Changed startCronJobs() to initCronJobs()
+    initCronJobs();
   });
 });
