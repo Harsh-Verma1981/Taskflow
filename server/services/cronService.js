@@ -152,8 +152,9 @@ const processPendingReminders = async () => {
   try {
     // 1. Find all pending reminders due up to this exact moment
     const dueReminders = await Reminder.find({
-      scheduledFor: { $lte: now },
-      status: 'PENDING',
+      scheduledFor: { $lte: new Date() },
+      // status: 'PENDING',
+      status: { $in: ["PENDING", "pending"] },
     })
       .populate('task')
       .populate('user');

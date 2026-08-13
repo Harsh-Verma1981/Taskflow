@@ -9,15 +9,18 @@ const createReminder = async (req, res) => {
       return res.status(400).json({ message: "label and time are required." });
     }
 
+    const reminderDate = scheduledFor ? new Date(scheduledFor) : (onceDate ? new Date(onceDate) : new Date());
+
     const reminder = await Reminder.create({
       user: req.user._id,
       task: task || null,
-      scheduledFor: scheduledFor ? new Date(scheduledFor) : new Date(),
+      scheduledFor: reminderDate,
       label,
       time,
       repeatType: repeatType || "once",
       repeatDayOfWeek: repeatDayOfWeek ?? null,
       onceDate: onceDate ? new Date(onceDate) : null,
+      status: "pending",
     });
 
     res.status(201).json(reminder);
@@ -39,7 +42,7 @@ const getReminders = async (req, res) => {
 // ── PATCH /api/reminders/:id ─────────────────────────────────────────────────
 const updateReminder = async (req, res) => {
   try {
-    const allowed = ["label", "time", "repeatType", "repeatDayOfWeek", "onceDate", "isActive"];
+    const allowed = ["label", "time", "repeatType", "repeatDayOfWeek", "onceDate", "isActive", "status"];
     const updates = {};
     allowed.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
 
