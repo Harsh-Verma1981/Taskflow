@@ -1,97 +1,36 @@
 const mongoose = require("mongoose");
-// server/models/Task.js
+
 const taskSchema = new mongoose.Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    title: { type: String, required: true },
-    description: { type: String },
-    dueDate: { type: Date },
-    priority: { type: String, enum: ["low", "medium", "high"], default: "medium" },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    rawInput: { type: String, trim: true },
+    notes: { type: String, trim: true },
+    dueDate: { type: Date, index: true },
+    dueTime: { type: String },
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high", "urgent"], // Added "urgent" to fix validation error
+      default: "medium",
+    },
     category: { type: String, default: "General" },
-    status: { type: String, enum: ["pending", "in-progress", "completed"], default: "pending" },
+    tags: [{ type: String }],
+    status: {
+      type: String,
+      enum: ["pending", "in-progress", "in_progress", "completed", "archived"], // Supports both hyphenated & underscored statuses
+      default: "pending",
+      index: true,
+    },
     reminderOffset: { type: String, default: "exact" },
     isNotified: { type: Boolean, default: false },
+    taskReminderSent: { type: Boolean, default: false },
+    remindBeforeMinutes: { type: Number, default: 30 },
+    completedAt: { type: Date, default: null },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
-// const taskSchema = new mongoose.Schema(
-//   {
-//     user: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "User",
-//       required: true,
-//       index: true,
-//     },
-//     // ── Core fields ─────────────────────────────────────
-//     title: {
-//       type: String,
-//       required: [true, "Task title is required"],
-//       trim: true,
-//       maxlength: [200, "Title too long"],
-//     },
-//     // Natural-language input the user typed e.g. "Meeting with client at 7pm today"
-//     rawInput: {
-//       type: String,
-//       trim: true,
-//     },
-//     notes: {
-//       type: String,
-//       trim: true,
-//       maxlength: [1000, "Notes too long"],
-//     },
-//     category: {
-//       type: String,
-//       default: "other",
-//     },
-//     tags: [{
-//       type: String,
-//       default: [],
-//     }],
-//     priority: {
-//       type: String,
-//       enum: ["low", "medium", "high", "urgent"],
-//       default: "low",
-//     },
-
-//     // ── Scheduling ──────────────────────────────────────
-//     dueDate: {
-//       type: Date,
-//       index: true,
-//     },
-//     dueTime: {
-//       type: String, // "19:00" – stored separately for display convenience
-//     },
-
-//     // ── Status ──────────────────────────────────────────
-//     status: {
-//       type: String,
-//       enum: ["pending", "in_progress", "completed", "archived"],
-//       default: "pending",
-//       index: true,
-//     },
-//     completedAt: {
-//       type: Date,
-//       default: null,
-//     },
-//     archivedAt: {
-//       type: Date,
-//       default: null,
-//     },
-
-//     // ── Reminder linked to this specific task ───────────
-//     // (separate Reminder docs handle recurring reminders)
-//     taskReminderSent: {
-//       type: Boolean,
-//       default: false,
-//     },
-//     // remind X minutes before dueDate (default 30 min before)
-//     remindBeforeMinutes: {
-//       type: Number,
-//       default: 30,
-//     },
-//   },
-//   { timestamps: true }
-// );
 
 // Virtual: is this task overdue?
 taskSchema.virtual("isOverdue").get(function () {

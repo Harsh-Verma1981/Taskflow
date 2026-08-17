@@ -1,219 +1,310 @@
-// const cron = require("node-cron");
-// const Reminder = require("../models/Reminder");
-// const Task = require("../models/Task");
-// const User = require("../models/User");
-// const { sendTaskReminderEmail, sendStandingReminderEmail } = require("./mailerService");
+// require('dotenv').config();
+// const cron = require('node-cron');
+// const nodemailer = require('nodemailer');
+// const Task = require('../models/Task');
+// const Reminder = require('../models/Reminder');
 
-// // ── Helpers ──────────────────────────────────────────────────────────────────
+// // Transporter configuration
+// const transporter = nodemailer.createTransport({
+//   host: process.env.SMTP_HOST || 'smtp.gmail.com',
+//   port: Number(process.env.SMTP_PORT) || 465,
+//   secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for 587
+//   auth: {
+//     user: process.env.SMTP_USER,
+//     pass: process.env.SMTP_PASS,
+//   },
+//   tls: {
+//     rejectUnauthorized: false,
+//     ciphers: 'SSLv3', // Helps prevent connection resets on local networks
+//   },
+//   connectionTimeout: 10000, // 10 seconds timeout
+// });
 
-// /** Returns "HH:MM" string for the current time in UTC */
-// const nowHHMM = () => {
-//   const d = new Date();
-//   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+// const sendNotificationEmail = async (toEmail, userName, title, scheduledTime) => {
+//   const mailOptions = {
+//     from: `"Taskflow Notifications" <${process.env.EMAIL_USER}>`,
+//     to: toEmail,
+//     subject: `⏰ Taskflow Reminder: ${title}`,
+//     html: `
+//       <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+//         <h2>Hello ${userName || 'there'},</h2>
+//         <p>This is a reminder for your scheduled item:</p>
+//         <blockquote style="background: #f9f9f9; padding: 12px; border-left: 4px solid #4F46E5; font-size: 16px;">
+//           <strong>${title}</strong>
+//         </blockquote>
+//         <p><strong>Scheduled Time:</strong> ${new Date(scheduledTime).toLocaleString()}</p>
+//         <p>Stay productive!</p>
+//       </div>
+//     `,
+//   };
+
+//   return await transporter.sendMail(mailOptions);
 // };
 
-// /** Day of week: 0=Sun … 6=Sat */
-// const todayDOW = () => new Date().getUTCDay();
-
-// /** Is today a weekday? */
-// const isWeekday = () => { const d = todayDOW(); return d >= 1 && d <= 5; };
-
-// /** Is today a weekend? */
-// const isWeekend = () => { const d = todayDOW(); return d === 0 || d === 6; };
-
-// // ── Job 1 : Standing reminders (runs every minute) ───────────────────────────
-// const standingReminderJob = cron.schedule("* * * * *", async () => {
-//   try {
-//     const currentTime = nowHHMM();
-//     const dow = todayDOW();
-
-//     // Fetch all active, unfired reminders whose time matches current minute
-//     const candidates = await Reminder.find({
-//       isActive: true,
-//       fired: false,
-//       time: currentTime,
-//     }).populate("user", "name email emailNotifications");
-
-//     if (!candidates.length) return;
-
-//     for (const reminder of candidates) {
-//       const user = reminder.user;
-//       if (!user || !user.emailNotifications) continue;
-
-//       let shouldFire = false;
-
-//       switch (reminder.repeatType) {
-//         case "daily":
-//           shouldFire = true;
-//           break;
-//         case "weekly":
-//           shouldFire = reminder.repeatDayOfWeek === dow;
-//           break;
-//         case "weekdays":
-//           shouldFire = isWeekday();
-//           break;
-//         case "weekends":
-//           shouldFire = isWeekend();
-//           break;
-//         case "once":
-//           if (reminder.onceDate) {
-//             const today = new Date();
-//             const od = new Date(reminder.onceDate);
-//             shouldFire =
-//               od.getUTCFullYear() === today.getUTCFullYear() &&
-//               od.getUTCMonth() === today.getUTCMonth() &&
-//               od.getUTCDate() === today.getUTCDate();
-//           }
-//           break;
-//       }
-
-//       if (!shouldFire) continue;
-
-//       try {
-//         await sendStandingReminderEmail(user, reminder);
-//         reminder.lastFiredAt = new Date();
-//         // Mark once-reminders as done so they never repeat
-//         if (reminder.repeatType === "once") {
-//           reminder.fired = true;
-//         }
-//         await reminder.save();
-//       } catch (emailErr) {
-//         console.error(`❌  Failed to email ${user.email}:`, emailErr.message);
-//       }
-//     }
-//   } catch (err) {
-//     console.error("❌  Standing reminder job error:", err.message);
-//   }
-// }, { scheduled: false }); // started explicitly below
-
-
-// // ── Job 2 : Task due-date reminders (runs every minute) ──────────────────────
-// /*
-//   Finds tasks that are:
-//     - pending or in_progress
-//     - dueDate is within the next (remindBeforeMinutes) minutes
-//     - taskReminderSent === false
-//   Then sends an email and marks them as sent.
-// */
-// const taskDueReminderJob = cron.schedule("* * * * *", async () => {
+// const checkAndSendReminders = async () => {
 //   try {
 //     const now = new Date();
-//     const windowEnd = new Date(now.getTime() + 31 * 60 * 1000); // look 31 min ahead
+//     // Only check items due within the last 15 minutes up to current time
+//     // This stops old historical tasks from triggering bulk emails!
+//     const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
 
-//     const tasks = await Task.find({
-//       status: { $in: ["pending", "in_progress"] },
-//       taskReminderSent: false,
-//       dueDate: { $gte: now, $lte: windowEnd },
-//     }).populate("user", "name email emailNotifications");
+//     // 1. Check Tasks
+//     const pendingTasks = await Task.find({
+//       dueDate: { $gte: fifteenMinutesAgo, $lte: now },
+//       status: { $nin: ['completed', 'archived'] }, // Skip completed or archived tasks
+//       isNotified: { $ne: true },
+//     }).populate('user', 'email name');
 
-//     for (const task of tasks) {
-//       const user = task.user;
-//       if (!user || !user.emailNotifications) continue;
+//     for (const task of pendingTasks) {
+//       if (task.user && task.user.email) {
+//         console.log(`[CRON] Sending task email to: ${task.user.email} for "${task.title}"`);
+        
+//         await sendNotificationEmail(
+//           task.user.email,
+//           task.user.name,
+//           task.title,
+//           task.dueDate
+//         );
 
-//       // Fire when the dueDate is within remindBeforeMinutes from now
-//       const minutesUntilDue = (new Date(task.dueDate) - now) / 60000;
-//       if (minutesUntilDue > task.remindBeforeMinutes) continue;
-
-//       try {
-//         await sendTaskReminderEmail(user, task);
-//         task.taskReminderSent = true;
-//         await task.save();
-//       } catch (emailErr) {
-//         console.error(`❌  Task reminder email failed for "${task.title}":`, emailErr.message);
+//         await Task.updateOne(
+//           { _id: task._id },
+//           { $set: { isNotified: true, taskReminderSent: true } }
+//         );
 //       }
 //     }
-//   } catch (err) {
-//     console.error("❌  Task due reminder job error:", err.message);
+
+    
+//     // 2. Check Standalone Reminders
+//     const pendingReminders = await Reminder.find({
+//       $and: [
+//         {
+//           $or: [
+//             { scheduledFor: { $gte: fifteenMinutesAgo, $lte: now } },
+//             { dueDate: { $gte: fifteenMinutesAgo, $lte: now } },
+//           ],
+//         },
+//         {
+//           $or: [
+//             { status: 'PENDING' },
+//             { status: 'pending' },
+//             { status: { $exists: false } },
+//           ],
+//         },
+//         { isNotified: { $ne: true } },
+//       ],
+//     }).populate('user', 'email name');
+
+//     console.log(`[CRON DEBUG] Found ${pendingReminders.length} pending reminders at ${now.toISOString()}`);
+
+//     for (const reminder of pendingReminders) {
+//       const recipientEmail = reminder.user?.email;
+//       const recipientName = reminder.user?.name;
+//       const title = reminder.label || reminder.title || 'Scheduled Reminder';
+//       const targetTime = reminder.scheduledFor || reminder.dueDate;
+
+//       if (recipientEmail) {
+//         console.log(`[CRON] Sending reminder email to: ${recipientEmail} for "${title}"`);
+
+//         await sendNotificationEmail(recipientEmail, recipientName, title, targetTime);
+
+//         // Update status and flags to prevent duplicate sends
+//         await Reminder.updateOne(
+//           { _id: reminder._id },
+//           { $set: { status: 'COMPLETED', isNotified: true } }
+//         );
+//         console.log(`[CRON] Reminder ${reminder._id} marked as COMPLETED.`);
+//       } else {
+//         console.warn(`[CRON WARNING] Reminder ${reminder._id} has no valid user email attached.`);
+//       }
+//     }
+//   } catch (error) {
+//     console.error('[CRON ERROR]', error);
 //   }
-// }, { scheduled: false });
-
-
-// // ── Start both jobs ──────────────────────────────────────────────────────────
-// const startCronJobs = () => {
-//   standingReminderJob.start();
-//   taskDueReminderJob.start();
-//   console.log("⏰  Cron jobs started (running every minute)");
 // };
 
-// module.exports = { startCronJobs };
+// const initCronJobs = () => {
+//   // Runs every minute
+//   cron.schedule('* * * * *', () => {
+//     checkAndSendReminders();
+//   });
+//   console.log('⏰ Notification Cron Job Initialized');
+// };
 
+// module.exports = { initCronJobs };
+// upper one is working but has some bugs ready for task page not reminders
 
-// gemini upgradation 
+require('dotenv').config();
 const cron = require('node-cron');
+const nodemailer = require('nodemailer');
+const Task = require('../models/Task');
 const Reminder = require('../models/Reminder');
-const { sendReminderEmail } = require('./mailerService');
 
 /**
- * Process pending reminders scheduled for now or in the past
+ * Creates a fresh Nodemailer transporter per send call
+ * to avoid socket timeout / ECONNRESET errors on idle connections.
  */
-const processPendingReminders = async () => {
-  const now = new Date();
+const createTransporter = () => {
+  const port = Number(process.env.SMTP_PORT) || 587;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: port,
+    secure: port === 465, // true for port 465, false for 587 / other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false,
+      ciphers: 'SSLv3',
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  });
+};
 
+/**
+ * Helper function to send notification emails cleanly
+ */
+const sendNotificationEmail = async (to, name, title, date) => {
+  const transporter = createTransporter();
+  
+  const formattedDate = date ? new Date(date).toLocaleString() : 'Scheduled Time';
+
+  const mailOptions = {
+    from: `"TaskFlow" <${process.env.SMTP_USER}>`,
+    to,
+    subject: `TaskFlow Reminder: ${title}`,
+    text: `Hello ${name || 'User'},\n\nThis is your scheduled notification for: "${title}".\nScheduled Time: ${formattedDate}\n\nBest regards,\nTaskFlow Team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #4F46E5;">TaskFlow Reminder</h2>
+        <p>Hello <strong>${name || 'User'}</strong>,</p>
+        <p>This is a reminder for your item: <strong>${title}</strong></p>
+        <p><strong>Scheduled Time:</strong> ${formattedDate}</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #666;">You received this because an automated reminder was set on TaskFlow.</p>
+      </div>
+    `,
+  };
+
+  return await transporter.sendMail(mailOptions);
+};
+
+/**
+ * Core Cron Service Routine
+ * Runs every minute to check for pending Tasks and Reminders
+ */
+const checkAndSendReminders = async () => {
   try {
-    // 1. Find all pending reminders due up to this exact moment
-    const dueReminders = await Reminder.find({
-      scheduledFor: { $lte: new Date() },
-      // status: 'PENDING',
-      status: { $in: ["PENDING", "pending"] },
-    })
-      .populate('task')
-      .populate('user');
+    const now = new Date();
+    // 15-min past window stops old legacy tasks from bulk sending
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    // 2-min future buffer absorbs local clock skew
+    const searchUntil = new Date(now.getTime() + 2 * 60 * 1000);
 
-    if (dueReminders.length === 0) return;
+    // ==========================================
+    // 1. PROCESS PENDING TASKS
+    // ==========================================
+    const pendingTasks = await Task.find({
+      dueDate: { $gte: fifteenMinutesAgo, $lte: searchUntil },
+      status: { $nin: ['completed', 'archived'] },
+      isNotified: { $ne: true },
+    }).populate('user', 'email name');
 
-    console.log(`[Cron Engine] Found ${dueReminders.length} due reminder(s). Processing...`);
+    for (const task of pendingTasks) {
+      if (task.user && task.user.email) {
+        console.log(`[CRON] Sending task email to: ${task.user.email} for "${task.title}"`);
+        
+        try {
+          await sendNotificationEmail(
+            task.user.email,
+            task.user.name,
+            task.title,
+            task.dueDate
+          );
 
-    // 2. Loop and process each reminder safely
-    for (const reminder of dueReminders) {
-      // Atomic Lock: Mark as PROCESSING immediately to block parallel cron execution
-      reminder.status = 'PROCESSING';
-      await reminder.save();
-
-      try {
-        const userEmail = reminder.user?.email;
-        const taskTitle = reminder.task?.title || 'Scheduled Task';
-        const taskDesc = reminder.task?.description || '';
-        const dueDate = reminder.task?.dueDate || reminder.scheduledFor;
-
-        if (!userEmail) {
-          throw new Error('Associated user email not found');
+          // Atomic update prevents full schema re-validation errors
+          await Task.updateOne(
+            { _id: task._id },
+            { $set: { isNotified: true, taskReminderSent: true } }
+          );
+          console.log(`[CRON] Task ${task._id} marked as notified.`);
+        } catch (mailErr) {
+          console.error(`[CRON ERROR] Failed sending email for task ${task._id}:`, mailErr.message);
         }
+      } else {
+        console.warn(`[CRON WARNING] Task ${task._id} has no valid user email.`);
+      }
+    }
 
-        // Send email
-        await sendReminderEmail({
-          toEmail: userEmail,
-          taskTitle,
-          taskDescription: taskDesc,
-          dueDate,
-        });
+    // ==========================================
+    // 2. PROCESS STANDALONE REMINDERS
+    // ==========================================
+    const pendingReminders = await Reminder.find({
+      $and: [
+        {
+          $or: [
+            { scheduledFor: { $gte: fifteenMinutesAgo, $lte: searchUntil } },
+            { dueDate: { $gte: fifteenMinutesAgo, $lte: searchUntil } },
+          ],
+        },
+        {
+          $or: [
+            { status: 'PENDING' },
+            { status: 'pending' },
+            { status: { $exists: false } },
+          ],
+        },
+        { isNotified: { $ne: true } },
+      ],
+    }).populate('user', 'email name');
 
-        // Update reminder status to SENT
-        reminder.status = 'SENT';
-        reminder.sentAt = new Date();
-        await reminder.save();
-        console.log(`[Cron Engine] Email successfully sent for reminder ID: ${reminder._id}`);
-      } catch (err) {
-        console.error(`[Cron Engine] Failed to send reminder ID: ${reminder._id}`, err.message);
-        reminder.status = 'FAILED';
-        reminder.errorMessage = err.message;
-        await reminder.save();
+    for (const reminder of pendingReminders) {
+      const recipientEmail = reminder.user?.email;
+      const recipientName = reminder.user?.name;
+      const title = reminder.label || reminder.title || 'Scheduled Reminder';
+      const targetTime = reminder.scheduledFor || reminder.dueDate;
+
+      if (recipientEmail) {
+        console.log(`[CRON] Sending reminder email to: ${recipientEmail} for "${title}"`);
+
+        try {
+          await sendNotificationEmail(
+            recipientEmail,
+            recipientName,
+            title,
+            targetTime
+          );
+
+          await Reminder.updateOne(
+            { _id: reminder._id },
+            { $set: { status: 'COMPLETED', isNotified: true } }
+          );
+          console.log(`[CRON] Reminder ${reminder._id} marked as COMPLETED.`);
+        } catch (mailErr) {
+          console.error(`[CRON ERROR] Failed sending email for reminder ${reminder._id}:`, mailErr.message);
+        }
+      } else {
+        console.warn(`[CRON WARNING] Reminder ${reminder._id} has no valid user email.`);
       }
     }
   } catch (error) {
-    console.error('[Cron Engine] Error in reminder polling loop:', error);
+    console.error('[CRON CRITICAL ERROR]', error);
   }
 };
 
 /**
- * Initialize the 1-minute Cron Job Engine
+ * Initializes the Node-Cron schedule (Runs every 1 minute)
  */
 const initCronJobs = () => {
-  // Runs every minute: "* * * * *"
-  cron.schedule('* * * * *', async () => {
-    console.log('[Cron Engine] Running minute check for due reminders...');
-    await processPendingReminders();
+  console.log('⏰ Initializing Cron Service (Runs every minute)...');
+  cron.schedule('* * * * *', () => {
+    checkAndSendReminders();
   });
-  console.log('[Cron Engine] Service initialized successfully.');
 };
 
-module.exports = { initCronJobs, processPendingReminders };
+module.exports = {
+  initCronJobs,
+  checkAndSendReminders,
+};

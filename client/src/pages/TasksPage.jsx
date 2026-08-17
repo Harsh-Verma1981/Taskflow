@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
 import { format, isPast } from "date-fns";
-import { Plus, Search, Trash2, CheckCircle2, Clock, Filter } from "lucide-react";
+import { Plus, Search, Trash2, CheckCircle2, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../api/axios";
 import AddTaskModal from "../components/AddTaskModal";
 import SkeletonLoader from "../components/SkeletonLoader";
 import s from "./TasksPage.module.css";
 
-const CATS = ["all","work","personal","study","health","finance","other"];
-const PRIS = ["all","urgent","high","medium","low"];
+const CATS = ["all", "work", "personal", "study", "health", "finance", "other"];
+const PRIS = ["all", "urgent", "high", "medium", "low"];
 
 export default function TasksPage() {
-  const [tasks, setTasks]     = useState([]);
-  const [total, setTotal]     = useState(0);
+  const [tasks, setTasks] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [search, setSearch]   = useState("");
-  const [cat, setCat]         = useState("all");
-  const [pri, setPri]         = useState("all");
+  const [search, setSearch] = useState("");
+  const [cat, setCat] = useState("all");
+  const [pri, setPri] = useState("all");
 
   const load = async () => {
     setLoading(true);
@@ -26,26 +26,49 @@ export default function TasksPage() {
       if (search) params.search = search;
       if (cat !== "all") params.category = cat;
       if (pri !== "all") params.priority = pri;
+
       const { data } = await api.get("/tasks", { params });
-      setTasks(data.tasks);
-      setTotal(data.total);
-    } catch { toast.error("Could not load tasks"); }
-    finally { setLoading(false); }
+
+      // Robust array extraction handling both array & object formats
+      const taskArray = Array.isArray(data) ? data : data?.tasks || [];
+      const count = Array.isArray(data) ? data.length : data?.total || taskArray.length;
+
+      setTasks(taskArray);
+      setTotal(count);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load tasks");
+      setTasks([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [search, cat, pri]);
+  useEffect(() => {
+    load();
+  }, [search, cat, pri]);
 
   const markDone = async (id) => {
-    await api.patch(`/tasks/${id}`, { status: "completed" });
-    toast.success("Marked as done!");
-    load();
+    try {
+      // Changed to PUT to align with Express route definition
+      await api.put(`/tasks/${id}`, { status: "completed" });
+      toast.success("Marked as done!");
+      load();
+    } catch (err) {
+      toast.error("Failed to update task");
+    }
   };
 
   const deleteTask = async (id) => {
     if (!confirm("Delete this task?")) return;
-    await api.delete(`/tasks/${id}`);
-    toast.success("Task deleted");
-    load();
+    try {
+      await api.delete(`/tasks/${id}`);
+      toast.success("Task deleted");
+      load();
+    } catch (err) {
+      toast.error("Failed to delete task");
+    }
   };
 
   return (
@@ -73,35 +96,35 @@ export default function TasksPage() {
         </div>
         <div className={s.pills}>
           {CATS.map((c) => (
-            <button key={c} className={`${s.pill} ${cat===c ? s.pillActive : ""}`} onClick={() => setCat(c)}>
+            <button key={c} className={`${s.pill} ${cat === c ? s.pillActive : ""}`} onClick={() => setCat(c)}>
               {c}
             </button>
           ))}
         </div>
         <div className={s.pills}>
           {PRIS.map((p) => (
-            <button key={p} className={`${s.pill} ${pri===p ? s.pillActive : ""}`} onClick={() => setPri(p)}>
+            <button key={p} className={`${s.pill} ${pri === p ? s.pillActive : ""}`} onClick={() => setPri(p)}>
               {p}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Task list */}
+      {/* Task list with safe array length check */}
       {loading ? (
         <div className={s.center}>
           <SkeletonLoader count={4} type="title" className="tasks-skeleton" />
         </div>
-      ) : tasks.length === 0 ? (
+      ) : (tasks || []).length === 0 ? (
         <div className={`${s.empty} card`}>
           <p>No tasks found.</p>
-          <button className="btn-ghost" style={{marginTop:12}} onClick={() => setShowAdd(true)}>
+          <button className="btn-ghost" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)}>
             <Plus size={13} /> Add your first task
           </button>
         </div>
       ) : (
         <div className={s.list}>
-          {tasks.map((t) => (
+          {(tasks || []).map((t) => (
             <TaskRow key={t._id} task={t} onDone={markDone} onDelete={deleteTask} />
           ))}
         </div>
@@ -113,7 +136,8 @@ export default function TasksPage() {
 }
 
 function TaskRow({ task, onDone, onDelete }) {
-  const overdue = task.dueDate && isPast(new Date(task.dueDate));
+  const overdue = task.dueDate && isPast(new Date(task.dueDate)) && task.status !== "completed";
+  
   return (
     <div className={`${s.taskCard} card ${overdue ? s.overdue : ""}`}>
       <button className={s.doneBtn} onClick={() => onDone(task._id)} title="Mark done">
@@ -122,13 +146,14 @@ function TaskRow({ task, onDone, onDelete }) {
       <div className={s.taskBody}>
         <div className={s.taskTitle}>{task.title}</div>
         <div className={s.taskMeta}>
-          {task.tags && task.tags.length > 0 && task.tags.map(tag => (
-            <span key={tag} className={`badge ${s.tagBadge}`}>{tag}</span>
-          ))}
-          {!task.tags?.length && (
-            <span className={`badge cat-${task.category}`}>{task.category}</span>
+          {task.tags && task.tags.length > 0 ? (
+            task.tags.map((tag) => (
+              <span key={tag} className={`badge ${s.tagBadge}`}>{tag}</span>
+            ))
+          ) : (
+            <span className={`badge cat-${task.category || "other"}`}>{task.category || "General"}</span>
           )}
-          <span className={`badge pri-${task.priority}`}>{task.priority}</span>
+          <span className={`badge pri-${task.priority || "medium"}`}>{task.priority || "medium"}</span>
           {task.dueTime && (
             <span className={s.timeChip}><Clock size={10} /> {task.dueTime}</span>
           )}

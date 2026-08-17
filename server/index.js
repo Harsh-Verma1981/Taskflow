@@ -11,6 +11,8 @@ const { initCronJobs } = require("./services/cronService");
 const authRoutes     = require("./routes/auth");
 const taskRoutes     = require("./routes/tasks");
 const reminderRoutes = require("./routes/reminders");
+const Task = require("./models/Task");
+const Reminder = require("./models/Reminder");
 
 const app = express();
 
@@ -51,7 +53,22 @@ app.use((err, req, res, _next) => {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+connectDB().then(async () => {
+  // 🧹 ONE-TIME CLEANUP: Mark old legacy tasks as notified
+  try {
+    await Task.updateMany(
+      { dueDate: { $lt: new Date() } },
+      { $set: { isNotified: true, taskReminderSent: true } }
+    );
+    await Reminder.updateMany(
+      { scheduledFor: { $lt: new Date() } },
+      { $set: { status: 'COMPLETED' } }
+    );
+    console.log("✅ Cleanup complete: Old tasks marked as notified.");
+  } catch (err) {
+    console.error("Cleanup error:", err);
+  }
+
   app.listen(PORT, () => {
     console.log(`🚀  Server running on port ${PORT}`);
     initCronJobs();

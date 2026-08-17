@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { format, isToday, isPast } from "date-fns";
+import { format, isPast } from "date-fns";
 import { CheckCircle2, Clock, AlertTriangle, Bell, Plus, ArrowRight } from "lucide-react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +10,9 @@ import s from "./Dashboard.module.css";
 
 const StatCard = ({ icon: Icon, label, value, color, sub }) => (
   <div className={`${s.statCard} card`}>
-    <div className={s.statIcon} style={{ background: color + "20", color }}><Icon size={16} /></div>
+    <div className={s.statIcon} style={{ background: color + "20", color }}>
+      <Icon size={16} />
+    </div>
     <div className={s.statBody}>
       <div className={s.statLabel}>{label}</div>
       <div className={s.statNum}>{value}</div>
@@ -24,16 +26,29 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  const load = () => api.get("/tasks/dashboard").then((r) => setStats(r.data));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    api.get("/tasks/dashboard")
+      .then((r) => setStats(r.data))
+      .catch((err) => console.error("Failed to fetch dashboard stats:", err));
+  };
 
-    const hour = new Date().getHours();
+  useEffect(() => {
+    load();
+  }, []);
+
+  const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = user?.name?.split(" ")[0] || "there";
 
-  const completionPct = stats?.total > 0
-    ? Math.round((stats.completed / stats.total) * 100)
-    : 0;
+  // Safely map backend field names to variables with fallback defaults
+  const total = stats?.totalTasks ?? 0;
+  const completed = stats?.completedTasks ?? 0;
+  const pending = stats?.pendingTasks ?? 0;
+  const overdue = stats?.overdueTasks ?? 0;
+  const monthCompleted = stats?.monthCompleted ?? completed;
+  const tasksList = stats?.recentTasks || stats?.todayTasks || [];
+
+  const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
     <div className={s.page}>
@@ -50,18 +65,18 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className={s.statsGrid}>
-        <StatCard icon={CheckCircle2} label="Completed"  value={stats?.completed ?? "—"} color="#22c55e" sub={`${completionPct}% done`} />
-        <StatCard icon={Clock}        label="Pending"    value={stats?.pending ?? "—"}   color="#6C5CE7" sub="active tasks" />
-        <StatCard icon={AlertTriangle} label="Overdue"   value={stats?.overdue ?? "—"}   color="#ef4444" sub="needs action" />
-        <StatCard icon={Bell}         label="This month" value={stats?.monthCompleted ?? "—"} color="#f59e0b" sub="completed" />
+        <StatCard icon={CheckCircle2} label="Completed" value={completed} color="#22c55e" sub={`${completionPct}% done`} />
+        <StatCard icon={Clock} label="Pending" value={pending} color="#6C5CE7" sub="active tasks" />
+        <StatCard icon={AlertTriangle} label="Overdue" value={overdue} color="#ef4444" sub="needs action" />
+        <StatCard icon={Bell} label="This month" value={monthCompleted} color="#f59e0b" sub="completed" />
       </div>
 
       {/* Progress bar */}
-      {stats?.total > 0 && (
+      {total > 0 && (
         <div className={`${s.progressCard} card`}>
           <div className={s.progressHeader}>
             <span>Overall progress</span>
-            <span>{stats.completed} / {stats.total} tasks</span>
+            <span>{completed} / {total} tasks</span>
           </div>
           <div className={s.progressTrack}>
             <div className={s.progressFill} style={{ width: `${completionPct}%` }} />
@@ -69,10 +84,10 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Today's tasks */}
+      {/* Today's / Recent tasks */}
       <div className={s.section}>
         <div className={s.sectionHeader}>
-          <h2 className={s.sectionTitle}>Today's events</h2>
+          <h2 className={s.sectionTitle}>Recent tasks</h2>
           <Link to="/tasks" className={s.seeAll}>See all <ArrowRight size={13} /></Link>
         </div>
 
@@ -80,16 +95,16 @@ export default function Dashboard() {
           <div className={s.loading}>
             <SkeletonLoader count={3} type="title" className="dashboard-skeleton" />
           </div>
-        ) : stats.todayTasks?.length === 0 ? (
+        ) : tasksList.length === 0 ? (
           <div className={`${s.emptyCard} card`}>
-            <p>No tasks scheduled for today.</p>
-            <button className="btn-ghost" style={{marginTop:10}} onClick={() => setShowAdd(true)}>
+            <p>No tasks scheduled.</p>
+            <button className="btn-ghost" style={{ marginTop: 10 }} onClick={() => setShowAdd(true)}>
               <Plus size={13} /> Add your first task
             </button>
           </div>
         ) : (
           <div className={s.taskList}>
-            {stats.todayTasks.map((t) => (
+            {tasksList.map((t) => (
               <TodayTask key={t._id} task={t} onRefresh={load} />
             ))}
           </div>
@@ -107,27 +122,28 @@ function TodayTask({ task, onRefresh }) {
   const toggle = async () => {
     const newStatus = done ? "pending" : "completed";
     setDone(!done);
-    await api.patch(`/tasks/${task._id}`, { status: newStatus });
+    // Updated to PUT to match the taskController router definition
+    await api.put(`/tasks/${task._id}`, { status: newStatus });
     onRefresh();
   };
 
-  const overdue = task.dueDate && isPast(new Date(task.dueDate)) && !done;
+  const isOverdue = task.dueDate && isPast(new Date(task.dueDate)) && !done;
 
   return (
-    <div className={`${s.taskCard} card ${done ? s.taskDone : ""} ${overdue ? s.taskOverdue : ""}`}>
+    <div className={`${s.taskCard} card ${done ? s.taskDone : ""} ${isOverdue ? s.taskOverdue : ""}`}>
       <button className={`${s.checkBtn} ${done ? s.checked : ""}`} onClick={toggle}>
         {done && <CheckCircle2 size={16} />}
       </button>
       <div className={s.taskBody}>
         <div className={`${s.taskTitle} ${done ? s.strikethrough : ""}`}>{task.title}</div>
         <div className={s.taskMeta}>
-          <span className={`badge cat-${task.category}`}>{task.category}</span>
+          <span className={`badge cat-${task.category || "other"}`}>{task.category || "General"}</span>
           {task.dueTime && (
             <span className={s.timeChip}>
               <Clock size={10} /> {task.dueTime}
             </span>
           )}
-          {overdue && <span className="badge badge-danger">Overdue</span>}
+          {isOverdue && <span className="badge badge-danger">Overdue</span>}
         </div>
       </div>
     </div>

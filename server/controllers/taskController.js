@@ -1,98 +1,84 @@
-const Task = require("../models/Task");
-const Reminder = require("../models/Reminder");
+const Task = require('../models/Task');
 
-// ── Natural language date/time parser ────────────────────────────────────────
-const parseTaskInput = (input) => {
-  const lower = input.toLowerCase().trim();
-  const now = new Date();
-  let dueDate = null;
-  let dueTime = null;
-  let title = input.trim();
-
-  const timeRegex = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
-  const time24Regex = /\bat\s+(\d{2}):(\d{2})\b/;
-
-  let hours = null, minutes = 0;
-
-  const t24 = lower.match(time24Regex);
-  if (t24) {
-    hours = parseInt(t24[1]);
-    minutes = parseInt(t24[2]);
-  } else {
-    const t = lower.match(timeRegex);
-    if (t) {
-      hours = parseInt(t[1]);
-      minutes = t[2] ? parseInt(t[2]) : 0;
-      const meridiem = t[3];
-      if (meridiem === "pm" && hours < 12) hours += 12;
-      if (meridiem === "am" && hours === 12) hours = 0;
-      if (!meridiem && hours <= 8) hours += 12;
-    }
-  }
-
-  if (hours !== null) {
-    dueTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  }
-
-  const base = new Date(now);
-  base.setSeconds(0, 0);
-
-  if (/\btoday\b/.test(lower)) {
-    dueDate = new Date(base);
-  } else if (/\btomorrow\b/.test(lower)) {
-    dueDate = new Date(base);
-    dueDate.setDate(dueDate.getDate() + 1);
-  } else if (/\bnext\s+week\b/.test(lower)) {
-    dueDate = new Date(base);
-    dueDate.setDate(dueDate.getDate() + 7);
-  } else {
-    const days = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
-    const dayMatch = lower.match(/\b(?:on\s+|next\s+|this\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
-    if (dayMatch) {
-      const targetDow = days.indexOf(dayMatch[1]);
-      const currentDow = base.getDay();
-      let diff = targetDow - currentDow;
-      if (diff <= 0) diff += 7;
-      dueDate = new Date(base);
-      dueDate.setDate(dueDate.getDate() + diff);
-    }
-  }
-
-  if (dueDate && hours !== null) {
-    dueDate.setHours(hours, minutes, 0, 0);
-  } else if (!dueDate && hours !== null) {
-    dueDate = new Date(base);
-    dueDate.setHours(hours, minutes, 0, 0);
-    if (dueDate < now) {
-      dueDate.setDate(dueDate.getDate() + 1);
-    }
-  }
-
-  title = input
-    .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, "")
-    .replace(/\b(?:today|tomorrow|next week)\b/gi, "")
-    .replace(/\b(?:on\s+|next\s+|this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
-
+// Helper to parse raw input strings
+const parseTaskInput = (raw) => {
+  if (!raw) return { title: "", category: "other", priority: "low" };
+  
   let category = "other";
-  if (/\b(meeting|client|presentation|deploy|report|review|standup|work|office|call|interview)\b/.test(lower)) category = "work";
-  else if (/\b(exam|test|assignment|lecture|class|study|homework|submission|college|university)\b/.test(lower)) category = "study";
-  else if (/\b(gym|doctor|hospital|medicine|workout|run|walk|health)\b/.test(lower)) category = "health";
-  else if (/\b(pay|bill|bank|rent|insurance|tax|finance)\b/.test(lower)) category = "finance";
-  else if (/\b(grocery|family|birthday|party|dinner|trip|personal)\b/.test(lower)) category = "personal";
+  let priority = "low";
+  let title = raw;
 
-  let priority = "medium";
-  if (/\b(urgent|asap|critical|immediately|emergency)\b/.test(lower)) priority = "urgent";
-  else if (/\b(important|high|must)\b/.test(lower)) priority = "high";
-  else if (/\b(low|sometime|whenever)\b/.test(lower)) priority = "low";
+  const lower = raw.toLowerCase();
+  if (lower.includes("urgent") || lower.includes("important")) {
+    priority = "high";
+  } else if (lower.includes("medium")) {
+    priority = "medium";
+  }
 
-  return { title, dueDate, dueTime, category, priority };
+  if (lower.includes("work") || lower.includes("job")) {
+    category = "work";
+  } else if (lower.includes("personal")) {
+    category = "personal";
+  }
+
+  return { title, category, priority };
 };
 
-// ── POST /api/tasks ──────────────────────────────────────────────────────────
+// @desc    Get all tasks for logged-in user
+// @route   GET /api/tasks
+// @access  Private
+const getTasks = async (req, res) => {
+  try {
+    const { status, search } = req.query;
+    let query = { user: req.user._id };
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// @desc    Get task dashboard statistics
+// @route   GET /api/tasks/dashboard
+// @access  Private
+const getDashboardStats = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const totalTasks = await Task.countDocuments({ user: userId });
+    const pendingTasks = await Task.countDocuments({ user: userId, status: 'pending' });
+    const completedTasks = await Task.countDocuments({ user: userId, status: 'completed' });
+
+    const recentTasks = await Task.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({
+      totalTasks,
+      pendingTasks,
+      completedTasks,
+      recentTasks
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// @desc    Create a new task
+// @route   POST /api/tasks
+// @access  Private
 const createTask = async (req, res) => {
   try {
     const { rawInput, notes, remindBeforeMinutes, tags, category, priority, dueDate, dueTime } = req.body;
@@ -115,39 +101,37 @@ const createTask = async (req, res) => {
       finalTags = [parsed.category];
     }
 
+    // Combine Date + Time
+    let finalDueDate = dueDate ? new Date(dueDate) : parsed.dueDate;
+    const finalDueTime = dueTime || parsed.dueTime;
+
+    if (finalDueDate && finalDueTime) {
+      const [hours, minutes] = finalDueTime.split(":").map(Number);
+      finalDueDate.setHours(hours, minutes, 0, 0);
+    }
+
+    // Lead time calculation
     const leadMinutes = remindBeforeMinutes !== undefined 
       ? Number(remindBeforeMinutes) 
-      : (req.user.defaultReminderMinutes || 30);
+      : (req.user?.defaultReminderMinutes || 0);
 
-    const taskDueDate = dueDate ? new Date(dueDate) : parsed.dueDate;
+    if (finalDueDate && leadMinutes > 0) {
+      finalDueDate = new Date(finalDueDate.getTime() - leadMinutes * 60 * 1000);
+    }
 
-    // 1. Create Task
     const task = await Task.create({
       user: req.user._id,
       rawInput: rawInput?.trim() || "",
       title,
-      dueDate: taskDueDate,
-      dueTime: dueTime || parsed.dueTime,
+      dueDate: finalDueDate,
+      dueTime: finalDueTime,
       category: category || parsed.category || "other",
       tags: finalTags,
       priority: priority || parsed.priority || "low",
       notes: notes || "",
       remindBeforeMinutes: leadMinutes,
+      isNotified: false
     });
-
-    // 2. Automatically Create Associated Reminder Document for Cron Service
-    if (task.dueDate) {
-      const scheduledFor = new Date(new Date(task.dueDate).getTime() - leadMinutes * 60 * 1000);
-
-      await Reminder.create({
-        user: req.user._id,
-        task: task._id,
-        label: task.title,
-        time: task.dueTime || scheduledFor.toISOString().substring(11, 16),
-        scheduledFor,
-        status: "pending",
-      });
-    }
 
     res.status(201).json({ task, parsed });
   } catch (err) {
@@ -155,143 +139,83 @@ const createTask = async (req, res) => {
   }
 };
 
-// ── GET /api/tasks ───────────────────────────────────────────────────────────
-const getTasks = async (req, res) => {
-  try {
-    const { status, category, priority, search, sort = "-createdAt", page = 1, limit = 20 } = req.query;
-
-    const filter = { user: req.user._id };
-
-    if (status) filter.status = status;
-    else filter.status = { $in: ["pending", "in_progress"] };
-
-    if (category) filter.category = category;
-    if (priority) filter.priority = priority;
-    if (search) filter.title = { $regex: search, $options: "i" };
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const [tasks, total] = await Promise.all([
-      Task.find(filter).sort(sort).skip(skip).limit(parseInt(limit)),
-      Task.countDocuments(filter),
-    ]);
-
-    res.json({ tasks, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── GET /api/tasks/dashboard ─────────────────────────────────────────────────
-const getDashboardStats = async (req, res) => {
-  try {
-    const uid = req.user._id;
-    const now = new Date();
-    const startOfDay = new Date(now); startOfDay.setHours(0,0,0,0);
-    const endOfDay   = new Date(now); endOfDay.setHours(23,59,59,999);
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const [total, completed, pending, overdue, todayTasks, monthCompleted] = await Promise.all([
-      Task.countDocuments({ user: uid }),
-      Task.countDocuments({ user: uid, status: "completed" }),
-      Task.countDocuments({ user: uid, status: { $in: ["pending", "in_progress"] } }),
-      Task.countDocuments({ user: uid, status: { $in: ["pending","in_progress"] }, dueDate: { $lt: now } }),
-      Task.find({ user: uid, status: { $in: ["pending","in_progress"] }, dueDate: { $gte: startOfDay, $lte: endOfDay } }).sort("dueDate"),
-      Task.countDocuments({ user: uid, status: "completed", completedAt: { $gte: startOfMonth } }),
-    ]);
-
-    res.json({ total, completed, pending, overdue, todayTasks, monthCompleted });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── GET /api/tasks/:id ───────────────────────────────────────────────────────
-const getTask = async (req, res) => {
-  try {
-    const task = await Task.findOne({ _id: req.params.id, user: req.user._id });
-    if (!task) return res.status(404).json({ message: "Task not found." });
-    res.json(task);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── PATCH /api/tasks/:id ─────────────────────────────────────────────────────
+// @desc    Update an existing task
+// @route   PUT /api/tasks/:id
+// @access  Private
 const updateTask = async (req, res) => {
   try {
-    const allowed = ["title", "notes", "category", "tags", "priority", "status", "dueDate", "dueTime", "remindBeforeMinutes"];
-    const updates = {};
-    allowed.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+    const task = await Task.findOne({ _id: req.params.id, user: req.user._id });
 
-    if (updates.status === "completed") updates.completedAt = new Date();
-    if (updates.status === "archived") updates.archivedAt = new Date();
-
-    const task = await Task.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
-      updates,
-      { new: true, runValidators: true }
-    );
-    if (!task) return res.status(404).json({ message: "Task not found." });
-
-    // Sync Reminder document if dueDate or lead time changes
-    if (updates.dueDate || updates.remindBeforeMinutes !== undefined) {
-      const leadMinutes = task.remindBeforeMinutes ?? 30;
-      const scheduledFor = new Date(new Date(task.dueDate).getTime() - leadMinutes * 60 * 1000);
-
-      await Reminder.findOneAndUpdate(
-        { task: task._id, user: req.user._id },
-        { label: task.title, scheduledFor, status: "pending" },
-        { upsert: true }
-      );
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
     }
 
-    res.json(task);
+    const { title, notes, category, priority, status, dueDate, dueTime, remindBeforeMinutes, tags } = req.body;
+
+    if (title !== undefined) task.title = title.trim();
+    if (notes !== undefined) task.notes = notes;
+    if (category !== undefined) task.category = category;
+    if (priority !== undefined) task.priority = priority;
+    if (status !== undefined) task.status = status;
+    if (tags !== undefined) task.tags = tags;
+
+    if (dueDate !== undefined || dueTime !== undefined) {
+      const updatedDate = dueDate ? new Date(dueDate) : task.dueDate;
+      const updatedTime = dueTime !== undefined ? dueTime : task.dueTime;
+
+      if (updatedDate) {
+        let finalDueDate = new Date(updatedDate);
+        if (updatedTime) {
+          const [hours, minutes] = updatedTime.split(":").map(Number);
+          finalDueDate.setHours(hours, minutes, 0, 0);
+        }
+
+        const leadMinutes = remindBeforeMinutes !== undefined 
+          ? Number(remindBeforeMinutes) 
+          : task.remindBeforeMinutes;
+
+        if (leadMinutes > 0) {
+          finalDueDate = new Date(finalDueDate.getTime() - leadMinutes * 60 * 1000);
+        }
+
+        task.dueDate = finalDueDate;
+        task.dueTime = updatedTime;
+        task.isNotified = false;
+      }
+    }
+
+    if (remindBeforeMinutes !== undefined) {
+      task.remindBeforeMinutes = Number(remindBeforeMinutes);
+    }
+
+    const updatedTask = await task.save();
+    res.json(updatedTask);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// ── DELETE /api/tasks/:id ────────────────────────────────────────────────────
+// @desc    Delete a task
+// @route   DELETE /api/tasks/:id
+// @access  Private
 const deleteTask = async (req, res) => {
   try {
     const task = await Task.findOneAndDelete({ _id: req.params.id, user: req.user._id });
-    if (!task) return res.status(404).json({ message: "Task not found." });
 
-    // Remove associated reminder if present
-    await Reminder.findOneAndDelete({ task: req.params.id, user: req.user._id });
-
-    res.json({ message: "Task deleted." });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ── GET /api/tasks/history ───────────────────────────────────────────────────
-const getHistory = async (req, res) => {
-  try {
-    const { page = 1, limit = 20, month, year } = req.query;
-
-    const filter = {
-      user: req.user._id,
-      status: { $in: ["completed", "archived"] },
-    };
-
-    if (month && year) {
-      const from = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const to   = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
-      filter.completedAt = { $gte: from, $lte: to };
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const [tasks, total] = await Promise.all([
-      Task.find(filter).sort("-completedAt").skip(skip).limit(parseInt(limit)),
-      Task.countDocuments(filter),
-    ]);
-
-    res.json({ tasks, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ message: "Task deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-module.exports = { createTask, getTasks, getDashboardStats, getTask, updateTask, deleteTask, getHistory };
+module.exports = {
+  getTasks,
+  getDashboardStats,
+  createTask,
+  updateTask,
+  deleteTask,
+};

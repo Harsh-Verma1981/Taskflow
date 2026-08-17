@@ -1,10 +1,23 @@
 const express = require("express");
 const router = express.Router();
-const { protect } = require("../middleware/authMiddleware");
-const { createReminder, getReminders, updateReminder, deleteReminder } = require("../controllers/reminderController");
+const authMiddleware = require("../middleware/authMiddleware");
+const { 
+  createReminder, 
+  getReminders, 
+  updateReminder, 
+  deleteReminder 
+} = require("../controllers/reminderController");
 
-router.use(protect);
-router.route("/").get(getReminders).post(createReminder);
-router.route("/:id").patch(updateReminder).delete(deleteReminder);
+// Protect all routes with authMiddleware
+router.use(authMiddleware);
+
+router.route("/")
+  .get(getReminders)
+  .post(createReminder);
+
+router.route("/:id")
+  .put(updateReminder)
+  .patch(updateReminder)
+  .delete(deleteReminder);
 
 module.exports = router;
