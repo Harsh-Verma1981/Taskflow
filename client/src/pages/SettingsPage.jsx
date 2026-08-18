@@ -22,11 +22,11 @@ export default function SettingsPage() {
   const { user, setUser } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const [name,   setName]   = useState(user?.name  || "");
-  const [tz,     setTz]     = useState(user?.timezone || "Asia/Kolkata");
-  const [remindBefore, setRemindBefore] = useState(user?.defaultReminderMinutes || 30);
-  const [emails, setEmails] = useState(user?.emailNotifications ?? true);
-  const [saving, setSaving] = useState(false);
+  const [name, setName]                 = useState(user?.name || "");
+  const [tz, setTz]                     = useState(user?.timezone || "Asia/Kolkata");
+  const [remindBefore, setRemindBefore] = useState(user?.defaultReminderMinutes ?? 30);
+  const [emails, setEmails]             = useState(user?.emailNotifications ?? true);
+  const [saving, setSaving]             = useState(false);
 
   const initials = name
     ? name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
@@ -35,6 +35,10 @@ export default function SettingsPage() {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+
+    // Save locally for instant availability
+    localStorage.setItem("defaultReminderMinutes", remindBefore);
+
     try {
       const { data } = await api.patch("/auth/me", {
         name,

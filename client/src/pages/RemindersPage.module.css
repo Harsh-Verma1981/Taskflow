@@ -110,6 +110,7 @@
 
 .formActions {
   display: flex;
+  margin-top: 50px;
   justify-content: flex-end;
   gap: 10px;
 }

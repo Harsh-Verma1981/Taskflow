@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
 import s from "./AddTaskModal.module.css";
 
 const EXAMPLES = [
@@ -16,17 +17,34 @@ const CATEGORIES = ["work", "personal", "study", "health", "finance", "other"];
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 
 export default function AddTaskModal({ onClose, onSaved }) {
-  const [rawInput, setRawInput] = useState("");
-  const [notes, setNotes] = useState("");
-  const [remindBefore, setRemindBefore] = useState(30);
-  const [dueDate, setDueDate] = useState("");
-  const [dueTime, setDueTime] = useState("");
-  const [category, setCategory] = useState("other");
-  const [priority, setPriority] = useState("low");
-  const [tags, setTags] = useState([]);
-  const [tagInput, setTagInput] = useState("");
-  const [preview, setPreview] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  // Initialize from user's saved preference or local storage fallback
+  const getInitialRemindMinutes = () => {
+    if (user?.defaultReminderMinutes !== undefined) {
+      return Number(user.defaultReminderMinutes);
+    }
+    const savedLocal = localStorage.getItem("defaultReminderMinutes");
+    return savedLocal !== null ? Number(savedLocal) : 30;
+  };
+
+  const [rawInput, setRawInput]         = useState("");
+  const [notes, setNotes]               = useState("");
+  const [remindBefore, setRemindBefore] = useState(getInitialRemindMinutes);
+  const [dueDate, setDueDate]           = useState("");
+  const [dueTime, setDueTime]           = useState("");
+  const [category, setCategory]         = useState("other");
+  const [priority, setPriority]         = useState("low");
+  const [tags, setTags]                 = useState([]);
+  const [tagInput, setTagInput]         = useState("");
+  const [loading, setLoading]           = useState(false);
+
+  // Sync if user data changes after mounting
+  useEffect(() => {
+    if (user?.defaultReminderMinutes !== undefined) {
+      setRemindBefore(Number(user.defaultReminderMinutes));
+    }
+  }, [user?.defaultReminderMinutes]);
 
   const addTag = (e) => {
     if (e) e.preventDefault();
@@ -36,7 +54,8 @@ export default function AddTaskModal({ onClose, onSaved }) {
       setTagInput("");
     }
   };
-  const removeTag = (tag) => setTags(tags.filter(t => t !== tag));
+
+  const removeTag = (tag) => setTags(tags.filter((t) => t !== tag));
 
   const handleSave = async () => {
     if (!rawInput.trim() && !dueDate && !dueTime) {
@@ -55,7 +74,7 @@ export default function AddTaskModal({ onClose, onSaved }) {
         priority,
         tags,
       };
-      const { data } = await api.post("/tasks", payload);
+      await api.post("/tasks", payload);
       toast.success("Task added!");
       onSaved?.();
       setTimeout(onClose, 1200);

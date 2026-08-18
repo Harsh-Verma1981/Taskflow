@@ -4,15 +4,20 @@ import { Plus, Trash2, Bell, ToggleLeft, ToggleRight, Clock } from "lucide-react
 import api from "../api/axios";
 import styles from "./RemindersPage.module.css";
 
-const REPEAT_LABELS = {
-  once:     { label: "Once",      color: "#6b7280" },
-  daily:    { label: "Every day", color: "#6C5CE7" },
-  weekly:   { label: "Weekly",    color: "#3b82f6" },
-  weekdays: { label: "Weekdays",  color: "#22c55e" },
-  weekends: { label: "Weekends",  color: "#ec4899" },
-};
+const REPEAT_OPTIONS = [
+  { id: "once", label: "Once", color: "#6b7280" },
+  { id: "daily", label: "Every day", color: "#6C5CE7" },
+  { id: "weekly", label: "Weekly", color: "#3b82f6" },
+  { id: "weekdays", label: "Weekdays", color: "#22c55e" },
+  { id: "weekends", label: "Weekends", color: "#ec4899" },
+];
 
-const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const REPEAT_MAP = REPEAT_OPTIONS.reduce((acc, item) => {
+  acc[item.id] = item;
+  return acc;
+}, {});
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const EMPTY_FORM = { label: "", time: "19:00", repeatType: "daily", repeatDayOfWeek: 1, onceDate: "" };
 
@@ -40,13 +45,32 @@ export default function RemindersPage() {
     e.preventDefault();
     setSaving(true);
     try {
+      // Send repeatType, frequency, and type for backend schema compatibility
+      const selectedRepeat = form.repeatType || "daily";
+
       const payload = {
         label: form.label,
-        time:  form.time,
-        repeatType: form.repeatType,
+        title: form.label,
+        time: form.time,
+        repeatType: selectedRepeat,
+        frequency: selectedRepeat,
+        type: selectedRepeat,
+        isActive: true,
+        status: "PENDING",
+        isNotified: false,
       };
-      if (form.repeatType === "weekly") payload.repeatDayOfWeek = form.repeatDayOfWeek;
-      if (form.repeatType === "once")   payload.onceDate = form.onceDate;
+
+      if (selectedRepeat === "weekly") {
+        payload.repeatDayOfWeek = form.repeatDayOfWeek;
+      }
+
+      if (selectedRepeat === "once") {
+        payload.onceDate = form.onceDate;
+        if (form.onceDate && form.time) {
+          payload.scheduledFor = new Date(`${form.onceDate}T${form.time}`).toISOString();
+          payload.dueDate = payload.scheduledFor;
+        }
+      }
 
       await api.post("/reminders", payload);
       toast.success("Reminder set! You'll get emails at the scheduled time.");
@@ -61,10 +85,19 @@ export default function RemindersPage() {
   };
 
   const toggleActive = async (r) => {
+    const currentActive = r.isActive ?? (r.status?.toUpperCase() === "PENDING" && !r.isNotified);
+    const newActiveState = !currentActive;
+    const newStatus = newActiveState ? "PENDING" : "CANCELLED";
+
     try {
-      await api.patch(`/reminders/${r._id}`, { isActive: !r.isActive });
+      await api.patch(`/reminders/${r._id}`, { 
+        isActive: newActiveState, 
+        status: newStatus,
+        isNotified: false 
+      });
+
       setReminders((prev) =>
-        prev.map((x) => (x._id === r._id ? { ...x, isActive: !x.isActive } : x))
+        prev.map((x) => (x._id === r._id ? { ...x, isActive: newActiveState, status: newStatus } : x))
       );
     } catch (_) {
       toast.error("Failed to update reminder");
@@ -82,15 +115,48 @@ export default function RemindersPage() {
     }
   };
 
+  const getDisplayTime = (r) => {
+    if (r.time) return r.time;
+    const dateSource = r.scheduledFor || r.dueDate;
+    if (dateSource) {
+      const d = new Date(dateSource);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      }
+    }
+    return "19:00";
+  };
+
   return (
     <div className={styles.page}>
-      <div className={styles.topBar}>
+      {/* ── Top Header Bar ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <div>
-          <h1 className={styles.title}>Reminders</h1>
-          <p className={styles.sub}>Standing alerts — set once, fire automatically</p>
+          <h1 className={styles.title} style={{ margin: 0, fontSize: "24px", fontWeight: "700" }}>Reminders</h1>
+          <p className={styles.sub} style={{ margin: "4px 0 0 0", color: "#6b7280" }}>Standing alerts — set once, fire automatically</p>
         </div>
-        <button className={styles.addBtn} onClick={() => setShowForm(!showForm)}>
-          <Plus size={15} /> New reminder
+
+        <button
+          type="button"
+          onClick={() => setShowForm(!showForm)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            backgroundColor: "#6C5CE7",
+            color: "#FFFFFF",
+            border: "none",
+            borderRadius: "10px",
+            padding: "10px 18px",
+            fontWeight: "600",
+            fontSize: "14px",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(108, 92, 231, 0.25)",
+            transition: "all 0.2s ease"
+          }}
+        >
+          <Plus size={16} />
+          {showForm ? "Close form" : "New reminder"}
         </button>
       </div>
 
@@ -104,7 +170,7 @@ export default function RemindersPage() {
         </p>
       </div>
 
-      {/* ── Create form ── */}
+      {/* ── Create Form ── */}
       {showForm && (
         <form className={styles.createForm} onSubmit={handleCreate}>
           <h3 className={styles.formTitle}>New reminder</h3>
@@ -131,25 +197,40 @@ export default function RemindersPage() {
             </div>
           </div>
 
-          <div className={styles.field}>
-            <label>Repeat</label>
-            <div className={styles.repeatGrid}>
-              {Object.entries(REPEAT_LABELS).map(([key, { label, color }]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`${styles.repeatBtn} ${form.repeatType === key ? styles.repeatActive : ""}`}
-                  style={form.repeatType === key ? { background: `${color}18`, borderColor: color, color } : {}}
-                  onClick={() => setForm({ ...form, repeatType: key })}
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Styled Repeat Option Buttons */}
+          <div className={styles.field} style={{ marginTop: "16px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: "600" }}>Repeat</label>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {REPEAT_OPTIONS.map((opt) => {
+                const isSelected = form.repeatType === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, repeatType: opt.id }))}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      border: isSelected ? `2px solid ${opt.color}` : "1px solid #e5e7eb",
+                      backgroundColor: isSelected ? `${opt.color}15` : "#ffffff",
+                      color: isSelected ? opt.color : "#374151",
+                      boxShadow: isSelected ? `0 2px 8px ${opt.color}25` : "none",
+                      transition: "all 0.15s ease",
+                      outline: "none"
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {form.repeatType === "weekly" && (
-            <div className={styles.field}>
+            <div className={styles.field} style={{ marginTop: "16px" }}>
               <label>Day of week</label>
               <select
                 value={form.repeatDayOfWeek}
@@ -161,7 +242,7 @@ export default function RemindersPage() {
           )}
 
           {form.repeatType === "once" && (
-            <div className={styles.field}>
+            <div className={styles.field} style={{ marginTop: "16px" }}>
               <label>Date</label>
               <input
                 type="date"
@@ -193,19 +274,24 @@ export default function RemindersPage() {
       ) : (
         <div className={styles.list}>
           {reminders.map((r) => {
-            const rt = REPEAT_LABELS[r.repeatType] || REPEAT_LABELS.once;
+            // Check repeatType, frequency, or type with fallback
+            const freqKey = r.repeatType || r.frequency || r.type || "daily";
+            const rt = REPEAT_MAP[freqKey] || REPEAT_MAP.daily;
+            const isItemActive = r.isActive ?? (r.status?.toUpperCase() === "PENDING" && !r.isNotified);
+            const displayTime = getDisplayTime(r);
+
             return (
-              <div key={r._id} className={`${styles.reminderCard} ${!r.isActive ? styles.inactive : ""}`}>
+              <div key={r._id} className={`${styles.reminderCard} ${!isItemActive ? styles.inactive : ""}`}>
                 <div className={styles.reminderIcon} style={{ background: `${rt.color}18` }}>
                   <Clock size={16} color={rt.color} />
                 </div>
                 <div className={styles.reminderBody}>
-                  <div className={styles.reminderLabel}>{r.label}</div>
+                  <div className={styles.reminderLabel}>{r.label || r.title}</div>
                   <div className={styles.reminderMeta}>
-                    <span className={styles.timeTag}>{r.time}</span>
+                    {displayTime && <span className={styles.timeTag}>{displayTime}</span>}
                     <span className={styles.repeatTag} style={{ background: `${rt.color}18`, color: rt.color }}>
                       {rt.label}
-                      {r.repeatType === "weekly" && r.repeatDayOfWeek != null
+                      {freqKey === "weekly" && r.repeatDayOfWeek != null
                         ? ` · ${DAYS[r.repeatDayOfWeek]}`
                         : ""}
                     </span>
@@ -220,9 +306,9 @@ export default function RemindersPage() {
                   <button
                     className={styles.toggleBtn}
                     onClick={() => toggleActive(r)}
-                    title={r.isActive ? "Pause" : "Enable"}
+                    title={isItemActive ? "Pause" : "Enable"}
                   >
-                    {r.isActive
+                    {isItemActive
                       ? <ToggleRight size={22} color="#6C5CE7" />
                       : <ToggleLeft  size={22} color="#9ca3af" />}
                   </button>

@@ -5,34 +5,48 @@ const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const { user, updateUser } = useAuth();
-  const [theme, setTheme] = useState(localStorage.getItem("theme") || user?.theme || "light");
 
+  // 1. Initialize directly from localStorage first
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved || user?.theme || "light";
+  });
+
+  // 2. Apply theme to HTML root element and save in localStorage
   useEffect(() => {
     const root = document.documentElement;
+
     if (theme === "dark") {
       root.setAttribute("data-theme", "dark");
+      root.classList.add("dark");
     } else {
       root.removeAttribute("data-theme");
+      root.classList.remove("dark");
     }
+
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  // Sync with user profile when it loads or changes
+  // 3. Only sync from user profile if localStorage was never set
   useEffect(() => {
-    if (user?.theme) {
+    const savedLocal = localStorage.getItem("theme");
+    if (!savedLocal && user?.theme) {
       setTheme(user.theme);
     }
   }, [user?.theme]);
 
+  // 4. Toggle theme function
   const toggleTheme = async () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    // Also persist to server if user is logged in
-    if (user) {
+    localStorage.setItem("theme", newTheme);
+
+    // Save to server in background if user is logged in
+    if (user && updateUser) {
       try {
         await updateUser({ theme: newTheme });
       } catch (err) {
-        console.warn("Failed to save theme preference:", err.message);
+        console.warn("Failed to save theme preference on server:", err.message);
       }
     }
   };

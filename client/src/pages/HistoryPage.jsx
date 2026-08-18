@@ -1,25 +1,30 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
-import { CheckCircle2, Archive, Clock, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, Archive, Clock, Search, ChevronLeft, ChevronRight, X } from "lucide-react";
 import api from "../api/axios";
 import styles from "./HistoryPage.module.css";
 
 const CAT_COLOR = {
-  work:"#6C5CE7", personal:"#22c55e", study:"#3b82f6",
-  health:"#ec4899", finance:"#f59e0b", other:"#9ca3af",
+  work: "#6C5CE7",
+  personal: "#22c55e",
+  study: "#3b82f6",
+  health: "#ec4899",
+  finance: "#f59e0b",
+  other: "#9ca3af",
 };
 
 const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 export default function HistoryPage() {
-  const [tasks, setTasks]     = useState([]);
-  const [total, setTotal]     = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage]       = useState(1);
-  const [search, setSearch]   = useState("");
+  const [tasks, setTasks]         = useState([]);
+  const [total, setTotal]         = useState(0);
+  const [loading, setLoading]     = useState(true);
+  const [page, setPage]           = useState(1);
+  const [search, setSearch]       = useState("");
+  const [timeFilter, setTimeFilter] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear]   = useState("");
 
@@ -29,32 +34,45 @@ export default function HistoryPage() {
     setLoading(true);
     try {
       const params = { page, limit: PER_PAGE };
-      if (filterMonth && filterYear) {
-        params.month = filterMonth;
-        params.year  = filterYear;
-      }
-      const { data } = await api.get("/tasks/history", { params });
+      if (filterMonth) params.month = filterMonth;
+      if (filterYear)  params.year  = filterYear;
 
-      let filtered = data.tasks;
-      if (search) {
-        filtered = filtered.filter((t) =>
-          t.title.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-      setTasks(filtered);
-      setTotal(data.total);
-    } catch (_) {} finally {
+      const { data } = await api.get("/tasks/history", { params });
+      setTasks(data.tasks || []);
+      setTotal(data.total || 0);
+    } catch (_) {
+      setTasks([]);
+    } finally {
       setLoading(false);
     }
-  }, [page, filterMonth, filterYear, search]);
+  }, [page, filterMonth, filterYear]);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
-  // Group tasks by month label
-  const grouped = tasks.reduce((acc, task) => {
+  // 🔍 Active Client-side Filter (Search Text & Time Filter)
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      // 1. Title/Notes search
+      const matchesSearch =
+        !search.trim() ||
+        (t.title || "").toLowerCase().includes(search.toLowerCase()) ||
+        (t.notes || "").toLowerCase().includes(search.toLowerCase());
+
+      // 2. Time filter
+      const taskTime = t.dueTime || (t.completedAt ? format(new Date(t.completedAt), "HH:mm") : "");
+      const matchesTime = !timeFilter || taskTime.includes(timeFilter);
+
+      return matchesSearch && matchesTime;
+    });
+  }, [tasks, search, timeFilter]);
+
+  // Group filtered tasks by month label
+  const grouped = filteredTasks.reduce((acc, task) => {
     const date = task.completedAt || task.archivedAt || task.updatedAt;
     const key  = date ? format(new Date(date), "MMMM yyyy") : "Unknown";
     if (!acc[key]) acc[key] = [];
@@ -62,6 +80,15 @@ export default function HistoryPage() {
     return acc;
   }, {});
 
+  const clearAllFilters = () => {
+    setSearch("");
+    setTimeFilter("");
+    setFilterMonth("");
+    setFilterYear("");
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(search || timeFilter || filterMonth || filterYear);
   const totalPages = Math.ceil(total / PER_PAGE);
 
   return (
@@ -73,19 +100,31 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
+      {/* ── Filter Controls Bar ── */}
       <div className={styles.filtersBar}>
+        {/* Text Search Input */}
         <div className={styles.searchWrap}>
           <Search size={14} className={styles.searchIcon} />
           <input
             className={styles.searchInput}
             placeholder="Search history…"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
+        {/* Filters Group */}
         <div className={styles.dateFilters}>
+          {/* Specific Time Picker */}
+          <input
+            type="time"
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value)}
+            className={styles.select}
+            title="Filter by specific time"
+          />
+
+          {/* Month Selector */}
           <select
             value={filterMonth}
             onChange={(e) => { setFilterMonth(e.target.value); setPage(1); }}
@@ -97,36 +136,37 @@ export default function HistoryPage() {
             ))}
           </select>
 
+          {/* Year Selector */}
           <select
             value={filterYear}
             onChange={(e) => { setFilterYear(e.target.value); setPage(1); }}
             className={styles.select}
           >
             <option value="">All years</option>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
           </select>
 
-          {(filterMonth || filterYear) && (
-            <button
-              className={styles.clearBtn}
-              onClick={() => { setFilterMonth(""); setFilterYear(""); setPage(1); }}
-            >
-              Clear
+          {/* Clear Button */}
+          {hasActiveFilters && (
+            <button className={styles.clearBtn} onClick={clearAllFilters}>
+              <X size={12} /> Clear
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Content ── */}
+      {/* ── Content Area ── */}
       {loading ? (
         <div className={styles.loading}>
           {[...Array(5)].map((_, i) => <div key={i} className={styles.skeleton} />)}
         </div>
-      ) : tasks.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <div className={styles.emptyState}>
           <Archive size={40} color="#d1d5db" />
-          <p>No history yet</p>
-          <p className={styles.emptyHint}>Completed tasks will appear here.</p>
+          <p>No history found</p>
+          <p className={styles.emptyHint}>Try adjusting or clearing your search filters.</p>
         </div>
       ) : (
         <>
@@ -140,9 +180,7 @@ export default function HistoryPage() {
                   return (
                     <div key={task._id} className={styles.historyCard}>
                       <div className={`${styles.statusIcon} ${isCompleted ? styles.statusDone : styles.statusArchived}`}>
-                        {isCompleted
-                          ? <CheckCircle2 size={16} />
-                          : <Archive size={16} />}
+                        {isCompleted ? <CheckCircle2 size={16} /> : <Archive size={16} />}
                       </div>
 
                       <div className={styles.historyBody}>
@@ -155,7 +193,10 @@ export default function HistoryPage() {
                           )}
                           <span
                             className={styles.catChip}
-                            style={{ background: `${CAT_COLOR[task.category]}18`, color: CAT_COLOR[task.category] }}
+                            style={{
+                              background: `${CAT_COLOR[task.category] || "#9ca3af"}18`,
+                              color: CAT_COLOR[task.category] || "#9ca3af",
+                            }}
                           >
                             {task.category}
                           </span>
