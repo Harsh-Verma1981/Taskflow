@@ -145,23 +145,35 @@ const Reminder = require('../models/Reminder');
  */
 const createTransporter = () => {
   const port = Number(process.env.SMTP_PORT) || 587;
+  
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: port,
-    secure: port === 465, // true for port 465, false for 587 / other ports
+    secure: port === 465, // false for 587 STARTTLS
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
     tls: {
       rejectUnauthorized: false,
-      ciphers: 'SSLv3',
+      // Removed ciphers: 'SSLv3'
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
   });
 };
+
+// checking mail logs
+const transporter = createTransporter();
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ SMTP Connection Error:", error);
+  } else {
+    console.log("✅ SMTP Transporter is ready to send emails");
+  }
+});
 
 /**
  * Helper function to send notification emails cleanly
