@@ -19,11 +19,10 @@ const MONTHS = [
 ];
 
 export default function HistoryPage() {
-  const [tasks, setTasks]         = useState([]);
-  const [total, setTotal]         = useState(0);
-  const [loading, setLoading]     = useState(true);
-  const [page, setPage]           = useState(1);
-  const [search, setSearch]       = useState("");
+  const [tasks, setTasks]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [page, setPage]             = useState(1);
+  const [search, setSearch]         = useState("");
   const [timeFilter, setTimeFilter] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear]   = useState("");
@@ -33,46 +32,69 @@ export default function HistoryPage() {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: PER_PAGE };
-      if (filterMonth) params.month = filterMonth;
-      if (filterYear)  params.year  = filterYear;
-
-      const { data } = await api.get("/tasks/history", { params });
+      // Fetch history data (fetching larger limit so client-side month/year filters work seamlessly)
+      const { data } = await api.get("/tasks/history", {
+        params: { limit: 100 }
+      });
       setTasks(data.tasks || []);
-      setTotal(data.total || 0);
     } catch (_) {
       setTasks([]);
     } finally {
       setLoading(false);
     }
-  }, [page, filterMonth, filterYear]);
+  }, []);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  // 🔍 Active Client-side Filter (Search Text & Time Filter)
+  // 🔍 Strict Filtering Logic
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      // 1. Title/Notes search
-      const matchesSearch =
-        !search.trim() ||
-        (t.title || "").toLowerCase().includes(search.toLowerCase()) ||
-        (t.notes || "").toLowerCase().includes(search.toLowerCase());
+      const taskDateObj = new Date(t.completedAt || t.archivedAt || t.updatedAt || t.createdAt);
+      
+      // 1. Month Filter (1-indexed)
+      if (filterMonth !== "") {
+        const taskMonth = taskDateObj.getMonth() + 1; // 1 to 12
+        if (taskMonth !== Number(filterMonth)) return false;
+      }
 
-      // 2. Time filter
-      const taskTime = t.dueTime || (t.completedAt ? format(new Date(t.completedAt), "HH:mm") : "");
-      const matchesTime = !timeFilter || taskTime.includes(timeFilter);
+      // 2. Year Filter
+      if (filterYear !== "") {
+        const taskYear = taskDateObj.getFullYear();
+        if (taskYear !== Number(filterYear)) return false;
+      }
 
-      return matchesSearch && matchesTime;
+      // 3. Search Text Filter
+      if (search.trim() !== "") {
+        const query = search.toLowerCase();
+        const matchesTitle = (t.title || "").toLowerCase().includes(query);
+        const matchesNotes = (t.notes || "").toLowerCase().includes(query);
+        if (!matchesTitle && !matchesNotes) return false;
+      }
+
+      // 4. Time Filter
+      if (timeFilter !== "") {
+        const taskTime = t.dueTime || (t.completedAt ? format(taskDateObj, "HH:mm") : "");
+        if (!taskTime.includes(timeFilter)) return false;
+      }
+
+      return true;
     });
-  }, [tasks, search, timeFilter]);
+  }, [tasks, filterMonth, filterYear, search, timeFilter]);
+
+  // Client-side Pagination
+  const totalPages = Math.ceil(filteredTasks.length / PER_PAGE) || 1;
+  const paginatedTasks = useMemo(() => {
+    const start = (page - 1) * PER_PAGE;
+    return filteredTasks.slice(start, start + PER_PAGE);
+  }, [filteredTasks, page]);
 
   // Group filtered tasks by month label
-  const grouped = filteredTasks.reduce((acc, task) => {
+  const grouped = paginatedTasks.reduce((acc, task) => {
     const date = task.completedAt || task.archivedAt || task.updatedAt;
     const key  = date ? format(new Date(date), "MMMM yyyy") : "Unknown";
     if (!acc[key]) acc[key] = [];
@@ -89,42 +111,39 @@ export default function HistoryPage() {
   };
 
   const hasActiveFilters = Boolean(search || timeFilter || filterMonth || filterYear);
-  const totalPages = Math.ceil(total / PER_PAGE);
 
   return (
     <div className={styles.page}>
       <div className={styles.topBar}>
         <div>
           <h1 className={styles.title}>History</h1>
-          <p className={styles.sub}>{total} completed task{total !== 1 ? "s" : ""} in your archive</p>
+          <p className={styles.sub}>{filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""} found</p>
         </div>
       </div>
 
       {/* ── Filter Controls Bar ── */}
       <div className={styles.filtersBar}>
-        {/* Text Search Input */}
+        {/* Search Input */}
         <div className={styles.searchWrap}>
           <Search size={14} className={styles.searchIcon} />
           <input
             className={styles.searchInput}
             placeholder="Search history…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
 
         {/* Filters Group */}
         <div className={styles.dateFilters}>
-          {/* Specific Time Picker */}
           <input
             type="time"
             value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value)}
+            onChange={(e) => { setTimeFilter(e.target.value); setPage(1); }}
             className={styles.select}
             title="Filter by specific time"
           />
 
-          {/* Month Selector */}
           <select
             value={filterMonth}
             onChange={(e) => { setFilterMonth(e.target.value); setPage(1); }}
@@ -136,7 +155,6 @@ export default function HistoryPage() {
             ))}
           </select>
 
-          {/* Year Selector */}
           <select
             value={filterYear}
             onChange={(e) => { setFilterYear(e.target.value); setPage(1); }}
@@ -148,7 +166,6 @@ export default function HistoryPage() {
             ))}
           </select>
 
-          {/* Clear Button */}
           {hasActiveFilters && (
             <button className={styles.clearBtn} onClick={clearAllFilters}>
               <X size={12} /> Clear
@@ -166,7 +183,7 @@ export default function HistoryPage() {
         <div className={styles.emptyState}>
           <Archive size={40} color="#d1d5db" />
           <p>No history found</p>
-          <p className={styles.emptyHint}>Try adjusting or clearing your search filters.</p>
+          <p className={styles.emptyHint}>No completed tasks match your selected month, year, or filter.</p>
         </div>
       ) : (
         <>
@@ -223,7 +240,7 @@ export default function HistoryPage() {
             </div>
           ))}
 
-          {/* ── Pagination ── */}
+          {/* Pagination */}
           {totalPages > 1 && (
             <div className={styles.pagination}>
               <button
