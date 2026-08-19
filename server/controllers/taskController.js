@@ -101,36 +101,35 @@ const createTask = async (req, res) => {
       finalTags = [parsed.category];
     }
 
-    // Combine Date + Time
-    let finalDueDate = dueDate ? new Date(dueDate) : parsed.dueDate;
+    // 1. Convert incoming date string safely into a valid JavaScript Date Object
+    let finalDueDate = dueDate ? new Date(dueDate) : (parsed.dueDate ? new Date(parsed.dueDate) : null);
     const finalDueTime = dueTime || parsed.dueTime;
 
+    // 2. Set exact hours & minutes on the Date object
     if (finalDueDate && finalDueTime) {
       const [hours, minutes] = finalDueTime.split(":").map(Number);
       finalDueDate.setHours(hours, minutes, 0, 0);
     }
 
-    // Lead time calculation
     const leadMinutes = remindBeforeMinutes !== undefined 
       ? Number(remindBeforeMinutes) 
       : (req.user?.defaultReminderMinutes || 0);
 
-    if (finalDueDate && leadMinutes > 0) {
-      finalDueDate = new Date(finalDueDate.getTime() - leadMinutes * 60 * 1000);
-    }
+    // FIX: Preserved exact target `dueDate` without subtracting leadMinutes directly onto `dueDate`.
 
     const task = await Task.create({
       user: req.user._id,
       rawInput: rawInput?.trim() || "",
       title,
-      dueDate: finalDueDate,
+      dueDate: finalDueDate, // Saved as an authentic BSON Date object
       dueTime: finalDueTime,
       category: category || parsed.category || "other",
       tags: finalTags,
       priority: priority || parsed.priority || "low",
       notes: notes || "",
       remindBeforeMinutes: leadMinutes,
-      isNotified: false
+      isNotified: false,
+      taskReminderSent: false
     });
 
     res.status(201).json({ task, parsed });
@@ -170,17 +169,10 @@ const updateTask = async (req, res) => {
           finalDueDate.setHours(hours, minutes, 0, 0);
         }
 
-        const leadMinutes = remindBeforeMinutes !== undefined 
-          ? Number(remindBeforeMinutes) 
-          : task.remindBeforeMinutes;
-
-        if (leadMinutes > 0) {
-          finalDueDate = new Date(finalDueDate.getTime() - leadMinutes * 60 * 1000);
-        }
-
-        task.dueDate = finalDueDate;
+        task.dueDate = finalDueDate; // Preserved raw target Date
         task.dueTime = updatedTime;
         task.isNotified = false;
+        task.taskReminderSent = false;
       }
     }
 
