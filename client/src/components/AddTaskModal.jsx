@@ -63,17 +63,28 @@ export default function AddTaskModal({ onClose, onSaved }) {
       return;
     }
     setLoading(true);
+
     try {
+      // TIMEZONE FIX: Build client ISO string so local IST time translates cleanly to server UTC
+      let formattedDueDate = undefined;
+      if (dueDate) {
+        const cleanDate = dueDate.includes("T") ? dueDate.split("T")[0] : dueDate;
+        const timeString = dueTime || "00:00";
+        const localDate = new Date(`${cleanDate}T${timeString}:00`);
+        formattedDueDate = localDate.toISOString();
+      }
+
       const payload = {
         rawInput: rawInput.trim(),
         notes,
         remindBeforeMinutes: remindBefore,
-        dueDate: dueDate || undefined,
+        dueDate: formattedDueDate,
         dueTime: dueTime || undefined,
         category,
         priority,
         tags,
       };
+
       await api.post("/tasks", payload);
       toast.success("Task added!");
       onSaved?.();

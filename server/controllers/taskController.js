@@ -101,27 +101,31 @@ const createTask = async (req, res) => {
       finalTags = [parsed.category];
     }
 
-    // 1. Convert incoming date string safely into a valid JavaScript Date Object
-    let finalDueDate = dueDate ? new Date(dueDate) : (parsed.dueDate ? new Date(parsed.dueDate) : null);
+    // TIMEZONE FIX: Handle ISO string input directly or construct clean local Date
+    let finalDueDate = null;
     const finalDueTime = dueTime || parsed.dueTime;
 
-    // 2. Set exact hours & minutes on the Date object
-    if (finalDueDate && finalDueTime) {
-      const [hours, minutes] = finalDueTime.split(":").map(Number);
-      finalDueDate.setHours(hours, minutes, 0, 0);
+    if (dueDate) {
+      // If client passed a full ISO string (e.g., "2026-08-19T16:30:00.000Z")
+      if (typeof dueDate === 'string' && dueDate.includes('T') && dueDate.endsWith('Z')) {
+        finalDueDate = new Date(dueDate);
+      } else {
+        // Handle plain date string ("YYYY-MM-DD")
+        const cleanDateStr = typeof dueDate === 'string' ? dueDate.split("T")[0] : new Date(dueDate).toISOString().split("T")[0];
+        const timeStr = finalDueTime || "00:00";
+        finalDueDate = new Date(`${cleanDateStr}T${timeStr}:00`);
+      }
     }
 
     const leadMinutes = remindBeforeMinutes !== undefined 
       ? Number(remindBeforeMinutes) 
       : (req.user?.defaultReminderMinutes || 0);
 
-    // FIX: Preserved exact target `dueDate` without subtracting leadMinutes directly onto `dueDate`.
-
     const task = await Task.create({
       user: req.user._id,
       rawInput: rawInput?.trim() || "",
       title,
-      dueDate: finalDueDate, // Saved as an authentic BSON Date object
+      dueDate: finalDueDate,
       dueTime: finalDueTime,
       category: category || parsed.category || "other",
       tags: finalTags,
@@ -131,6 +135,8 @@ const createTask = async (req, res) => {
       isNotified: false,
       taskReminderSent: false
     });
+
+    console.log(`[TASK CREATED] Title: "${task.title}" | Saved UTC Date: ${task.dueDate ? task.dueDate.toISOString() : 'NULL'}`);
 
     res.status(201).json({ task, parsed });
   } catch (err) {
@@ -159,17 +165,20 @@ const updateTask = async (req, res) => {
     if (tags !== undefined) task.tags = tags;
 
     if (dueDate !== undefined || dueTime !== undefined) {
-      const updatedDate = dueDate ? new Date(dueDate) : task.dueDate;
+      const updatedDate = dueDate || task.dueDate;
       const updatedTime = dueTime !== undefined ? dueTime : task.dueTime;
 
       if (updatedDate) {
-        let finalDueDate = new Date(updatedDate);
-        if (updatedTime) {
-          const [hours, minutes] = updatedTime.split(":").map(Number);
-          finalDueDate.setHours(hours, minutes, 0, 0);
+        let finalDueDate = null;
+        if (typeof updatedDate === 'string' && updatedDate.includes('T') && updatedDate.endsWith('Z')) {
+          finalDueDate = new Date(updatedDate);
+        } else {
+          const cleanDateStr = typeof updatedDate === 'string' ? updatedDate.split("T")[0] : new Date(updatedDate).toISOString().split("T")[0];
+          const timeStr = updatedTime || "00:00";
+          finalDueDate = new Date(`${cleanDateStr}T${timeStr}:00`);
         }
 
-        task.dueDate = finalDueDate; // Preserved raw target Date
+        task.dueDate = finalDueDate;
         task.dueTime = updatedTime;
         task.isNotified = false;
         task.taskReminderSent = false;
