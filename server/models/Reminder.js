@@ -8,7 +8,15 @@ const reminderSchema = new mongoose.Schema(
       required: true,
     },
     label: { type: String, required: true },
+    time: { type: String },
     scheduledFor: { type: Date, required: true },
+    repeatType: {
+      type: String,
+      enum: ['once', 'everyday', 'weekly', 'monthly'],
+      default: 'once',
+    },
+    repeatDayOfWeek: { type: Number, default: null },
+    onceDate: { type: Date, default: null },
     status: {
       type: String,
       enum: ['PENDING', 'pending', 'COMPLETED', 'completed', 'CANCELLED'],

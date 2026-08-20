@@ -19,28 +19,27 @@ const createReminder = async (req, res) => {
   try {
     const { task, scheduledFor, label, time, repeatType, repeatDayOfWeek, onceDate } = req.body;
 
-    if (!label || !time) {
-      return res.status(400).json({ message: "label and time are required." });
+    if (!label) {
+      return res.status(400).json({ message: "label is required." });
     }
 
-    // 1. Build a valid base JavaScript Date instance
-    let reminderDate = scheduledFor 
-      ? new Date(scheduledFor) 
-      : (onceDate ? new Date(onceDate) : new Date());
+    let reminderDate = null;
 
-    // 2. Set exact hours and minutes onto the Date object
-    if (time) {
-      const [hours, minutes] = time.split(":").map(Number);
-      reminderDate.setHours(hours, minutes, 0, 0);
+    if (scheduledFor) {
+      reminderDate = new Date(scheduledFor);
+    } else if (onceDate) {
+      const timeStr = time || "00:00";
+      reminderDate = new Date(`${onceDate.split("T")[0]}T${timeStr}:00`);
+    } else {
+      reminderDate = new Date();
     }
 
-    // 3. Save to database with status: "PENDING"
     const reminder = await Reminder.create({
       user: req.user._id,
       task: task || null,
       scheduledFor: reminderDate,
       label,
-      time,
+      time: time || "",
       repeatType: repeatType || "once",
       repeatDayOfWeek: repeatDayOfWeek ?? null,
       onceDate: onceDate ? new Date(onceDate) : null,
@@ -72,20 +71,17 @@ const updateReminder = async (req, res) => {
     if (repeatDayOfWeek !== undefined) reminder.repeatDayOfWeek = repeatDayOfWeek;
     if (onceDate !== undefined) reminder.onceDate = onceDate;
 
-    // Recalculate scheduledFor Date if date or time were changed
     if (scheduledFor !== undefined || time !== undefined) {
       const targetTime = time !== undefined ? time : reminder.time;
-      let targetDate = scheduledFor ? new Date(scheduledFor) : reminder.scheduledFor || new Date();
+      let targetDate = scheduledFor ? new Date(scheduledFor) : reminder.scheduledFor;
 
-      if (targetTime) {
-        const [hours, minutes] = targetTime.split(":").map(Number);
-        targetDate = new Date(targetDate);
-        targetDate.setHours(hours, minutes, 0, 0);
+      if (typeof scheduledFor === 'string' && !scheduledFor.endsWith('Z') && targetTime) {
+        const cleanDateStr = scheduledFor.split("T")[0];
+        targetDate = new Date(`${cleanDateStr}T${targetTime}:00`);
       }
 
       reminder.time = targetTime;
       reminder.scheduledFor = targetDate;
-      // Reset status to PENDING if user rescheduled
       reminder.status = "PENDING";
     }
 
